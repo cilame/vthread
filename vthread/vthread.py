@@ -11,7 +11,7 @@
 #==============================================================
 '''
 from threading import Thread,Lock,RLock,\
-                     current_thread
+                     current_thread,main_thread
 import builtins
 
 _org_print = print
@@ -27,11 +27,36 @@ def _new_print(*arg,**kw):
 
 
 lock = RLock()
-_vlog = True
-_elog = True
+_vlog = True # print是否显示线程名字
+_elog = True # 是否打印错误信息
 
 # 所有被装饰的原始函数都会放在这个地方
 orig_func = {}
+
+
+_monitor = None # 监视主线程是否在运行的标志
+
+def _main_monitor():
+    '''
+    #==============================================================
+    # 对主线程进行监视的函数
+    # 一旦主线程执行完毕就会向所有线程池函数队列尾注入停止标记
+    # 使所有的线程在执行完任务后都停止下来
+    # 对于命令行使用的 python 脚本尤为重要
+    # 因为如果所有线程不停止的话，控制权就不会交还给命令窗口
+    #==============================================================
+    '''
+    global _monitor
+    def _func():
+        while True:
+            import time
+            time.sleep(.1)
+            if not main_thread().isAlive():
+                pool_close_all()
+                break
+    if not _monitor:
+        _monitor = Thread(target=_func)
+        _monitor.start()
 
 class thread:
     '''
@@ -204,6 +229,12 @@ class pool:
         # 默认将 print 函数进行monkey patch
         patch_print()
 
+        # 新线程，监视主线程执行情况，一旦停止就向线程队列注入相应数量的停止标记
+        # 因为该线程池的原理就是让主线程变成派发函数的进程，执行到尾部自然就代表
+        # 分配的任务已经分配完了，这时就可以注入停止标记让线程执行完就赶紧结束掉
+        # 防止在命令行下控制权不交还的情况。
+        _main_monitor()
+
         # 智能选择线程数量
         num = pool._auto_pool_num(pool_num)
 
@@ -373,7 +404,8 @@ funcs = ["thread",
 # 全局参
 values = ["_elog",
           "_vlog",
-          "orig_func"]
+          "orig_func",
+          "lock"]
 
 
 __all__ = funcs + values
