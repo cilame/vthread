@@ -298,7 +298,7 @@ class pool:
         return num
 
 
-def close_pool_by_gqueue(gqueue=0):
+def pool_close_by_gqueue(gqueue=0):
     '''
     #==============================================================
     # 通过组名关闭该组所有的伺服线程
@@ -307,15 +307,17 @@ def close_pool_by_gqueue(gqueue=0):
     '''
     pool.change_thread_num(0,gqueue)
 
-def close_pools():
+def pool_close_all():
     '''
     #==============================================================
     # 关闭所有伺服线程
     #==============================================================
     '''
-    pool.change_thread_num(0,gqueue)
+    global _pool_func_num
+    for i in _pool_func_num:
+        pool.change_thread_num(0,i)
 
-def show_pools():
+def pool_show():
     global _pool_func_num
     l = len(_pool_func_num)
     print(f"threads group number: {l}")
@@ -364,8 +366,9 @@ funcs = ["thread",
          "atom",
          "patch_print",
          "unpatch_all",
-         "close_pools",
-         "show_pools"]
+         "pool_close_by_gqueue",
+         "pool_close_all",
+         "pool_show"]
 
 # 全局参
 values = ["_elog",
