@@ -1,6 +1,13 @@
 '''
 #==============================================================
-# 更加方便的多线程调用，类装饰器封装，使用方法见下方说明
+# 更加方便的多线程调用，类装饰器封装，一行代码实现线程池
+#
+# 注意：
+# 装饰器会默认对 print 函数进行 monkey patch
+# 会对python自带的 print 函数加锁使 print 带有原子性
+# 可以通过执行 vthread.unpatch_all() 解除这个补丁还原 print
+# 默认打开 log 让 print 能够输出线程名字
+# 可以通过设置 vthread._vlog 为 False 关掉显示线程名功能（不关锁）
 #==============================================================
 '''
 from threading import Thread,Lock,RLock,\
@@ -23,6 +30,9 @@ lock = RLock()
 _vlog = True
 _elog = True
 
+# 所有被装饰的原始函数都会放在这个地方
+orig_func = {}
+
 class thread:
     '''
     #==============================================================
@@ -30,11 +40,7 @@ class thread:
     #
     # >>> import vthread
     # >>>
-    # >>> # 对于 foolfunc 动态开启N个线程进行调用
-    # >>> # 默认对 print 函数进行 monkey patch
-    # >>> # 对 print 加锁使 print 函数都带有原子性
-    # >>> # 默认打开 log 让 print 能够输出线程名字
-    # >>>
+    # >>> # 对于 foolfunc 动态开启3个线程进行调用
     # >>> @vthread.vthread(3) # 默认参数:join=False,log=True
     # ... def foolfunc():
     # ...     print("foolstring")
@@ -71,6 +77,7 @@ class thread:
         # 类装饰器入口
         #==============================================================
         '''
+        orig_func[func.__name__] = func
         def _run_threads(*args,**kw):
             p = []
             for _ in range(self.num):
@@ -88,7 +95,6 @@ class thread:
         return _run_threads
 
 
-
 import queue
 
 # 默认0号作为全局函数队列
@@ -104,37 +110,20 @@ class pool:
     '''
     #==============================================================
     # 线程池的多线程装饰
-    #
-    # >>> import vthread
-    # >>>
-    # >>> # 下面的函数意义为，对于 foolfunc 开启4个线程（pool_num）
-    # >>> # 每次使用 foolfunc 函数时将该函数的执行传入队列3次
-    # >>> # 交给伺服线程执行3次
-    # >>>
-    # >>> @vthread.pool(3,4) 
-    # ... def foolfunc():
-    # ...     print("foolstring")
-    # >>> 
-    # >>> # 默认参数:pool_num=None,join=False,log=True,gqueue=0
-    # >>> # pool_num不选时就自动选 cpu 核心数
-    # >>> # 就是说，装饰方法还可以更简化为 @vthread.pool(3)
-    # >>> 
-    # >>> foolfunc() # 此方法被装饰执行传入伺服队列，待伺服函数执行
-    # [  Thread-1  ]: foolstring
-    # [  Thread-2  ]: foolstring
-    # [  Thread-3  ]: foolstring
-    # >>>
-    #==============================================================
-    # 好处就是对代码入侵较小，例如
+    # 对代码入侵较小，例如
     #
     # >>> import vthread
     # >>> import time
     # >>>
-    # >>> # 只需要加下面这一行就可以将普通迭代执行变成线程池多线程
-    # >>> @vthread.pool(1,5)
+    # >>> # 只需要加下面这一行就可以将普通迭代执行函数变成线程池多线程执行
+    # >>> @vthread.pool(5) # 对于 foolfunc 开启5个线程池（pool_num）
     # >>> def foolfunc(num):
     # ...     time.sleep(1)
     # ...     print(f"foolstring, foolnumb:{num}")
+    # >>>
+    # >>> # 默认参数:pool_num=None,join=False,log=True,gqueue=0
+    # >>> # pool_num不选时就自动选 cpu 核心数
+    # >>> # 就是说，装饰方法还可以更简化为 @vthread.pool()
     # >>>
     # >>> for i in range(10):
     # ...     foolfunc(i)
@@ -159,8 +148,8 @@ class pool:
     #
     # >>>
     # >>> import vthread
-    # >>> pool1 = vthread.pool(1,5,gqueue=1)
-    # >>> pool2 = vthread.pool(1,1,gqueue=2)
+    # >>> pool1 = vthread.pool(5,gqueue=1) # 开5个伺服线程，组名为1
+    # >>> pool2 = vthread.pool(1,gqueue=2) # 开1个伺服线程，组名为2
     # >>> 
     # >>> @pool1
     # >>> def foolfunc1(num):
@@ -186,16 +175,15 @@ class pool:
     # >>>
     # >>> # 通过上面的代码执行就很容易发现
     # >>> # pool2 装饰后的函数频率、线程数和 pool1 的不一样
-    # >>> # 分组功能可以更加灵活地使用线程
+    # >>> # 你可能某几个函数要用一个组，某几个函数用另一组
+    # >>> # 分组功能可以更加灵活地使用线程池
     # >>>
     #==============================================================
     '''
     join = False
-    def __init__(self,num,pool_num=None,join=False,log=True,gqueue=0):
+    def __init__(self,pool_num=None,join=False,log=True,gqueue=0):
         '''
         #==============================================================
-        # *args
-        #     :num       线程数量
         # **kw
         #     :pool_num  伺服线程数量
         #     :join      多线程是否join
@@ -203,7 +191,6 @@ class pool:
         #     :gqueue    全局队列表的index，默认0，建议用数字标识
         #==============================================================
         '''
-        self.num  = num
         pool.join = join
 
         global _vlog,_pool_queue,_pool_func_num
@@ -228,16 +215,7 @@ class pool:
             # 是以最后一个主动设置的线程池数为基准
             # 所以要排除不设置的情况
             if pool_num is not None:
-                x = _pool_func_num[gqueue] - num
-                # 当前线程数少于最后一次定义的数量时候会增加伺服线程
-                # 多了则会杀掉多余线程
-                if x < 0:
-                    pool.run(abs(x),gqueue)
-                if x > 0:
-                    for _ in range(abs(x)):
-                        self._pool.put(KillThreadParams)
-
-
+                pool.change_thread_num(num,gqueue)
 
     def __call__(self,func):
         '''
@@ -245,14 +223,35 @@ class pool:
         # 类装饰器入口
         #==============================================================
         '''
+        orig_func[func.__name__] = func
         def _run_threads(*args,**kw):
-            for _ in range(self.num):
-                # 将函数以及参数包装进 queue
-                self._pool.put((func,args,kw))
+            # 将函数以及参数包装进 queue
+            self._pool.put((func,args,kw))
         return _run_threads
 
+
     @staticmethod
-    def run(num=None,gqueue=0):
+    def change_thread_num(num,gqueue=0):
+        '''
+        #==============================================================
+        # 通过组名字，用来修改线程数量的函数，默认修改gqueue=0的组
+        # 是静态函数，你可以直接用 vthread.pool.change_thread_num(3,1)修改
+        # 就是简单的多退少补，用来动态修改伺服线程数量的。
+        #==============================================================
+        '''
+        global _pool_queue,_pool_func_num
+        x = _pool_func_num[gqueue] - num
+        # 当前线程数少于最后一次定义的数量时候会增加伺服线程
+        # 多了则会杀掉多余线程
+        if x < 0:
+            pool.run(abs(x),gqueue)
+        if x > 0:
+            for _ in range(abs(x)):
+                _pool_queue[gqueue].put(KillThreadParams)
+            _pool_func_num[gqueue] = num
+
+    @staticmethod
+    def run(num,gqueue):
         '''
         #==============================================================
         # 运行伺服线程，默认以 cpu 核心数作为伺服线程数量
@@ -269,10 +268,10 @@ class pool:
                         return
                     func,args,kw = v
                     func(*args,**kw)
-                except queue.Empty:
+                except:
                     if _elog:
                         print(" - stop_by_queue - ")
-        # 执行线程的开启
+        # 线程的开启
         v = []
         for _ in range(num):
             def _func():
@@ -299,6 +298,29 @@ class pool:
         return num
 
 
+def close_pool_by_gqueue(gqueue=0):
+    '''
+    #==============================================================
+    # 通过组名关闭该组所有的伺服线程
+    # 默认关闭gqueue=0组的所有伺服线程
+    #==============================================================
+    '''
+    pool.change_thread_num(0,gqueue)
+
+def close_pools():
+    '''
+    #==============================================================
+    # 关闭所有伺服线程
+    #==============================================================
+    '''
+    pool.change_thread_num(0,gqueue)
+
+def show_pools():
+    global _pool_func_num
+    l = len(_pool_func_num)
+    print(f"threads group number: {l}")
+    for i,j in _pool_func_num.items():
+        print(f"gqueue:{i}, alive threads number:{j}")
 
 
 def atom(func):
@@ -328,7 +350,7 @@ def patch_print():
 def unpatch_all():
     '''
     #==============================================================
-    # print 去补丁函数
+    # 去补丁函数
     #==============================================================
     '''
     builtins.print = _org_print
@@ -341,11 +363,14 @@ funcs = ["thread",
          "pool",
          "atom",
          "patch_print",
-         "unpatch_all"]
+         "unpatch_all",
+         "close_pools",
+         "show_pools"]
 
 # 全局参
 values = ["_elog",
-          "_vlog"]
+          "_vlog",
+          "orig_func"]
 
 
 __all__ = funcs + values
