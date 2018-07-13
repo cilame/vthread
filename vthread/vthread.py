@@ -55,7 +55,7 @@ def _main_monitor():
                 pool_close_all()
                 break
     if not _monitor:
-        _monitor = Thread(target=_func)
+        _monitor = Thread(target=_func,name="MainMonitor")
         _monitor.start()
 
 class thread:
@@ -65,7 +65,7 @@ class thread:
     #
     # >>> import vthread
     # >>>
-    # >>> # 对于 foolfunc 动态开启3个线程进行调用
+    # >>> # 将 foolfunc 变成动态开启3个线程执行的函数
     # >>> @vthread.vthread(3) # 默认参数:join=False,log=True
     # ... def foolfunc():
     # ...     print("foolstring")
@@ -271,21 +271,22 @@ class pool:
         #==============================================================
         '''
         global _pool_queue,_pool_func_num
-        x = _pool_func_num[gqueue] - num
-        # 当前线程数少于最后一次定义的数量时候会增加伺服线程
-        # 多了则会杀掉多余线程
-        if x < 0:
-            pool.run(abs(x),gqueue)
-        if x > 0:
-            for _ in range(abs(x)):
-                _pool_queue[gqueue].put(KillThreadParams)
-            _pool_func_num[gqueue] = num
+        if gqueue in _pool_func_num:
+            x = _pool_func_num[gqueue] - num
+            # 当前线程数少于最后一次定义的数量时候会增加伺服线程
+            # 多了则会杀掉多余线程
+            if x < 0:
+                pool.run(abs(x),gqueue)
+            if x > 0:
+                for _ in range(abs(x)):
+                    _pool_queue[gqueue].put(KillThreadParams)
+                _pool_func_num[gqueue] = num
 
     @staticmethod
     def run(num,gqueue):
         '''
         #==============================================================
-        # 运行伺服线程，默认以 cpu 核心数作为伺服线程数量
+        # 运行伺服线程，不指定数量则默认以 cpu 核心数作为伺服线程数量
         # 每个线程都等待任意函数放进队列，然后被线程抓出然后执行
         #==============================================================
         '''
@@ -299,19 +300,14 @@ class pool:
                         return
                     func,args,kw = v
                     func(*args,**kw)
-                except:
+                except BaseException as e:
                     if _elog:
-                        print(" - stop_by_queue - ")
+                        print(" - thread stop_by_error - ",e)
+                    break
         # 线程的开启
         v = []
         for _ in range(num):
-            def _func():
-                try:
-                    _pools_pull()
-                except Exception as e:
-                    if _elog:
-                        print(" - stop_by_error - ",e)
-            v.append(Thread(target=_func))
+            v.append(Thread(target=_pools_pull))
         for i in v: i.start()
         if pool.join:
             for i in v: i.join()
@@ -349,6 +345,19 @@ def pool_close_all():
         pool.change_thread_num(0,i)
 
 def pool_show():
+    '''
+    #==============================================================
+    # 简单的打印一下当前的线程池的组数
+    # 以及打印每一组线程池的线程数量
+    #
+    # >>> vthread.pool_show()
+    # [ MainThread ] threads group number: 3
+    # [ MainThread ] gqueue:0, alive threads number:6
+    # [ MainThread ] gqueue:1, alive threads number:5
+    # [ MainThread ] gqueue:2, alive threads number:2
+    # >>>
+    #==============================================================
+    '''
     global _pool_func_num
     l = len(_pool_func_num)
     print(f"threads group number: {l}")
@@ -359,7 +368,7 @@ def pool_show():
 def atom(func):
     '''
     #==============================================================
-    # 对任意函数进行原子包装
+    # 对任意函数进行原子包装（加锁）
     #==============================================================
     '''
     def _atom(*arg,**kw):
@@ -380,13 +389,19 @@ def patch_print():
     '''
     builtins.print = _new_print
 
-def unpatch_all():
+def unpatch_all(can_be_repatch=False):
     '''
     #==============================================================
     # 去补丁函数
+    # :can_be_repatch=False
+    #   因为设计是在每次装饰时就会默认patch一次
+    #   卸载后不可被重新patch的参数添加就是为了
+    #   可以使得在头部执行这个函数后后面的装饰都不会再patch
     #==============================================================
     '''
     builtins.print = _org_print
+    if not can_be_repatch:
+        _new_print = builtins.print
 
 
 

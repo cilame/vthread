@@ -4,7 +4,7 @@ import sys
   
 setup(  
     name="vthread",
-    version="0.0.3",
+    version="0.0.4",
     author="vilame",
     author_email="opaquism@hotmail.com",
     description="simple threading pack.",
