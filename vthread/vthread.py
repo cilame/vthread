@@ -4,20 +4,32 @@
 #
 # 注意：
 # 装饰器会默认对 print 函数进行 monkey patch
-# 会对python自带的 print 函数加锁使 print 带有原子性
+# 会对python自带的 print 函数加锁使 print 带有原子性便于调试
 # 可以通过执行 vthread.unpatch_all() 解除这个补丁还原 print
 # 默认打开 log 让 print 能够输出线程名字
-# 可以通过设置 vthread._vlog 为 False 关掉显示线程名功能（不关锁）
+# 可以通过 toggle 函数关掉显示线程名功能（不关锁）
 #==============================================================
 '''
 from threading import Thread,Lock,RLock,\
                      current_thread,main_thread
 import builtins
 
+
+lock = RLock()
+
+class log_flag:
+    _decorator_toggle = True
+    _vlog = True # print是否显示线程名字
+    _elog = True # 是否打印错误信息
+
+# 所有被装饰的原始函数都会放在这个地方
+orig_func = {}
+
+
 _org_print = print
 def _new_print(*arg,**kw):
     lock.acquire()
-    if _vlog:
+    if log_flag._vlog:
         name = current_thread().getName()
         name = f"[{name.center(12)}]"
         _org_print(name,*arg,**kw)
@@ -26,15 +38,29 @@ def _new_print(*arg,**kw):
     lock.release()
 
 
-lock = RLock()
-_vlog = True # print是否显示线程名字
-_elog = True # 是否打印错误信息
+def toggle(toggle=False,name="thread"):
+    '''
+    #==============================================================
+    # 开关显示方式
+    # 目前提供修改的参数有三个：
+    # 1. "thread"  # 是否在print时在最左显示线程名字
+    # 2. "error"   # 是否显示error
+    # 3. "monitor" # 是否开启线程池自动在主线程执行完自动补充执行线程结束
+    #              # 因为命令行执行不关闭所有线程，控制权不会交还给控制台
+    #              # 请尽量在主线程执行时候不要关闭这个开关
+    #==============================================================
+    '''
+    # 因为装饰器是每次装饰都会默认打开 _vlog 一次，所以添加这个参数放置
+    # 使得这个函数一旦在最开始执行之后，装饰器就不会再打开 _vlog 了
+    global _monitor
+    log_flag._decorator_toggle = False
+    if name == "thread" : log_flag._vlog = toggle
+    if name == "error"  : log_flag._elog = toggle
+    if name == "monitor": _monitor = "close_flag"
+    
 
-# 所有被装饰的原始函数都会放在这个地方
-orig_func = {}
 
-
-_monitor = None # 监视主线程是否在运行的标志
+_monitor = None # 监视主线程是否在运行的线程
 
 def _main_monitor():
     '''
@@ -90,8 +116,9 @@ class thread:
         self.num  = num
         self.join = join
 
-        global _vlog
-        _vlog = log
+        # 让配置在 toggle 执行变成只能手动配置 log_flag
+        if log_flag._decorator_toggle:
+            log_flag._vlog = log
         
         # 默认将 print 函数进行monkey patch
         patch_print()
@@ -111,7 +138,7 @@ class thread:
                     try:
                         func(*args,**kw)
                     except Exception as e:
-                        if _elog:
+                        if log_flag._elog:
                             print(" - stop_by_error - ",e)
                 p.append(Thread(target=_func))
             for i in p: i.start()
@@ -147,7 +174,7 @@ class pool:
     # ...     print(f"foolstring, foolnumb:{num}")
     # >>>
     # >>> # 默认参数:pool_num=None,join=False,log=True,gqueue=0
-    # >>> # pool_num不选时就自动选 cpu 核心数
+    # >>> # pool_num不选时就自动选 cpu 核心数，目前join参数无效
     # >>> # 就是说，装饰方法还可以更简化为 @vthread.pool()
     # >>>
     # >>> for i in range(10):
@@ -206,20 +233,22 @@ class pool:
     #==============================================================
     '''
     join = False
-    def __init__(self,pool_num=None,join=False,log=True,gqueue=0):
+    def __init__(self,pool_num=None,gqueue=0,join=False,log=True):
         '''
         #==============================================================
         # **kw
         #     :pool_num  伺服线程数量
+        #     :gqueue    全局队列表的index，默认0，建议用数字标识
         #     :join      多线程是否join
         #     :log       print函数的输出时是否加入线程名作前缀
-        #     :gqueue    全局队列表的index，默认0，建议用数字标识
         #==============================================================
         '''
         pool.join = join
 
-        global _vlog,_pool_queue,_pool_func_num
-        _vlog = log
+        global _pool_queue,_pool_func_num
+        # 让配置在 toggle 执行变成只能手动配置 log_flag
+        if log_flag._decorator_toggle:
+            log_flag._vlog = log
 
         # 默认用的是全局队列
         if gqueue not in _pool_queue:
@@ -268,6 +297,9 @@ class pool:
         # 通过组名字，用来修改线程数量的函数，默认修改gqueue=0的组
         # 是静态函数，你可以直接用 vthread.pool.change_thread_num(3,1)修改
         # 就是简单的多退少补，用来动态修改伺服线程数量的。
+        #
+        # 因为原理是向线程队列注入停止标记，所以不要考虑及时性
+        # 也是在设计初对任务执行完整性的一种考虑
         #==============================================================
         '''
         global _pool_queue,_pool_func_num
@@ -290,7 +322,7 @@ class pool:
         # 每个线程都等待任意函数放进队列，然后被线程抓出然后执行
         #==============================================================
         '''
-        global _pool_queue,_vlog,_elog
+        global _pool_queue
         # 拖池函数
         def _pools_pull():
             while True:
@@ -301,7 +333,7 @@ class pool:
                     func,args,kw = v
                     func(*args,**kw)
                 except BaseException as e:
-                    if _elog:
+                    if log_flag._elog:
                         print(" - thread stop_by_error - ",e)
                     break
         # 线程的开启
@@ -319,7 +351,7 @@ class pool:
                 from multiprocessing import cpu_count
                 num = cpu_count()
             except:
-                if _elog:
+                if log_flag._elog:
                     print("cpu_count error. use default num 4.")
                 num = 4
         return num
@@ -405,21 +437,19 @@ def unpatch_all(can_be_repatch=False):
         _new_print = builtins.print
 
 
-
-
 # 函数
 funcs = ["thread",
          "pool",
          "atom",
          "patch_print",
+         "toggle",
          "unpatch_all",
          "pool_close_by_gqueue",
          "pool_close_all",
          "pool_show"]
 
 # 全局参
-values = ["_elog",
-          "_vlog",
+values = ["log_flag",
           "orig_func",
           "lock"]
 
