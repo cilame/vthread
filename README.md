@@ -1,3 +1,17 @@
+#### 一个非常节约时间的 python 多线程函数库 vthread ，简而强大
+
+```python
+*thread
+*pool
+    **pool_close_all
+    **pool_close_by_gqueue
+    **pool_show
+*atom
+    **lock
+
+*为该函数库主要功能，**为附属或补充。其他方法 help(vthread) 里面都有详细说明。
+```
+
 - ##### 安装
 ```
 C:\Users\Administrator> pip3 install vthread
@@ -8,10 +22,6 @@ C:\Users\Administrator> pip3 install vthread
 import time
 import vthread
 
-# vthread.thread
-#============#
-# 普通多线程 #
-#============#
 @vthread.thread(5) # 只要这一行就能让函数变成开5个线程执行同个函数
 def foolfunc(num):
     time.sleep(1)
@@ -22,24 +32,19 @@ foolfunc(123) # 加入装饰器后，这个函数就变成了开5个线程执行
 # 考虑到函数库的易用性，个人觉得这种直接粗暴的开启多线程函数的测试需求比较常见
 # 所以才保留了这样的一个功能。
 
-============== RESTART: C:\Users\Administrator\Desktop\test.py ==============
->>> [  Thread-1  ] foolstring, test1 foolnumb: 123
+执行效果如下：
+[  Thread-1  ] foolstring, test1 foolnumb: 123
 [  Thread-2  ] foolstring, test1 foolnumb: 123
 [  Thread-3  ] foolstring, test1 foolnumb: 123
 [  Thread-4  ] foolstring, test1 foolnumb: 123
 [  Thread-5  ] foolstring, test1 foolnumb: 123
 ```
 - ##### 线程池（核心功能）
-不加装饰器就是普通的单线程，
-只用加一行就能在不破坏原来的结构直接实现线程池操作，能进行参数传递，支持分组，
-这已经到了不破坏代码的极限了。
+不加装饰器就是普通的单线程，只用加一行就能在不破坏原来的结构直接实现线程池操作，能进行参数传递，支持分组，这已经到了不破坏代码的极限了。
 ```python
 import time
 import vthread
-# vthread.pool
-#========#
-# 线程池 #
-#========#
+
 @vthread.pool(6) # 只用加这一行就能实现6条线程池的包装
 def foolfunc(num):
     time.sleep(1)
@@ -49,10 +54,10 @@ for i in range(10):
     foolfunc(i) # 加入装饰器后，这个函数变成往伺服线程队列里塞原函数的函数了
 
 # 不加装饰就是普通的单线程
-# 只用加一行就能不破坏原来的结构直接实现线程池操作，能进行参数传递
+# 只用加一行就能不破坏原来的代码结构直接实现线程池操作，能进行参数传递
 
-============== RESTART: C:\Users\Administrator\Desktop\asdf.py ==============
->>> [  Thread-1  ] foolstring, test2 foolnumb: 0
+执行效果如下：
+[  Thread-1  ] foolstring, test2 foolnumb: 0
 [  Thread-5  ] foolstring, test2 foolnumb: 4
 [  Thread-2  ] foolstring, test2 foolnumb: 2
 [  Thread-6  ] foolstring, test2 foolnumb: 5
@@ -67,10 +72,9 @@ for i in range(10):
 如果你想要让你的某几个函数有M个线程执行，而另外几个函数要N个线程去执行。
 那么请看看下面的使用说明
 ```
-# vthread.pool
-#==============#
-# 多组的线程池 #
-#==============#
+import time
+import vthread
+
 pool_1 = vthread.pool(5,gqueue=1) # 开5个伺服线程，组名为1
 pool_2 = vthread.pool(2,gqueue=2) # 开2个伺服线程，组名为2
 
@@ -100,9 +104,9 @@ for i in range(10): foolfunc3(i)
 ```
 # 有时候你需要把某些操作进行原子化
 # 可以把你要原子化的操作写成函数，用vthread.atom装饰就行
-#==========#
-# 加锁封装 #
-#==========#
+import time
+import vthread
+
 @vthread.thread(5)
 def foolfunc_():
 
@@ -158,7 +162,8 @@ def foolfunc1():
 @vthread.pool(18)
 def foolfunc1():
     pass
-这样就意味着gqueue=0的线程池数量为18
+# 这样就意味着gqueue=0的线程池数量为18
+
 
 # eg.2
 @vthread.pool(10)
@@ -167,7 +172,8 @@ def foolfunc1():
 @vthread.pool()
 def foolfunc1():
     pass
-这样就意味着gqueue=0的线程池数量为10
+# 这样就意味着gqueue=0的线程池数量为10
+
 
 # eg.3
 @vthread.pool()
@@ -178,10 +184,10 @@ def foolfunc1():
     pass
 这样就意味着gqueue=0的线程池数量为默认的cpu核心数
 
+
 # eg.4
 pool1 = vthread.pool(gqueue=1)
 pool2 = vthread.pool(6,gqueue=2)
 pool2 = vthread.pool(8,gqueue=2)
-这样就意味着gqueue=1的线程池数量为默认的cpu核心数
-这样就意味着gqueue=2的线程池数量为8
+# 这样就意味着gqueue=1的线程池数量为默认的cpu核心数，gqueue=2的线程池数量为8
 ```
