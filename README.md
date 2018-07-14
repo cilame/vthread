@@ -114,7 +114,7 @@ def foolfunc_():
 # 另外：
 # 为了便于调试函数在任意第一次装饰过后会对 print 打猴子补丁
 # 自带的 print 函数变成带锁的函数了，还加了些打印线程名字的操作
-# 可以修改 vthread._vlog 为 False 来阻止打印线程名
+# 可以通过 vthread.toggle 函数对这些或其他一些功能进行关闭
 # 也可以用 vthread.unpatch_all() 直接将 print 还原成系统默认函数
 # 更多详细内容可以 help(vthread)
 
