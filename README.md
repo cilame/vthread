@@ -1,16 +1,4 @@
-#### 一个非常节约时间的 python 多线程函数库 vthread ，简而强大
-
-```python
-*thread
-*pool
-    **pool_close_all
-    **pool_close_by_gqueue
-    **pool_show
-*atom
-    **lock
-
-*为该函数库主要功能，**为附属或补充。其他方法 help(vthread) 里面都有详细说明。
-```
+### python 多线程函数库 vthread ，简而强大
 
 - ##### 安装
 ```
