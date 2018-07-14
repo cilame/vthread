@@ -399,6 +399,7 @@ def unpatch_all(can_be_repatch=False):
     #   可以使得在头部执行这个函数后后面的装饰都不会再patch
     #==============================================================
     '''
+    global _new_print,_org_print
     builtins.print = _org_print
     if not can_be_repatch:
         _new_print = builtins.print
