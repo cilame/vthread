@@ -5,14 +5,15 @@
 # 注意：
 # 装饰器会默认对 print 函数进行 monkey patch
 # 会对python自带的 print 函数加锁使 print 带有原子性便于调试
-# 可以通过执行 vthread.unpatch_all() 解除这个补丁还原 print
 # 默认打开 log 让 print 能够输出线程名字
 # 可以通过 toggle 函数关掉显示线程名功能（不关锁）
+# 可以通过执行 vthread.unpatch_all() 解除这个补丁还原 print
 #==============================================================
 '''
 from threading import Thread,Lock,RLock,\
                      current_thread,main_thread
 import builtins
+import functools
 
 
 lock = RLock()
@@ -22,9 +23,9 @@ class log_flag:
     _vlog = True # print是否显示线程名字
     _elog = True # 是否打印错误信息
 
+
 # 所有被装饰的原始函数都会放在这个地方
 orig_func = {}
-
 
 _org_print = print
 def _new_print(*arg,**kw):
@@ -45,9 +46,7 @@ def toggle(toggle=False,name="thread"):
     # 目前提供修改的参数有三个：
     # 1. "thread"  # 是否在print时在最左显示线程名字
     # 2. "error"   # 是否显示error
-    # 3. "monitor" # 是否开启线程池自动在主线程执行完自动补充执行线程结束
-    #              # 因为命令行执行不关闭所有线程，控制权不会交还给控制台
-    #              # 请尽量在主线程执行时候不要关闭这个开关
+    # 3. "monitor" # 0.0.9 之后取消了这个参数，直接内置在初始化的默认选择里面
     #==============================================================
     '''
     # 因为装饰器是每次装饰都会默认打开 _vlog 一次，所以添加这个参数放置
@@ -56,33 +55,8 @@ def toggle(toggle=False,name="thread"):
     log_flag._decorator_toggle = False
     if name == "thread" : log_flag._vlog = toggle
     if name == "error"  : log_flag._elog = toggle
-    if name == "monitor": _monitor = "close_flag"
-    
 
 
-_monitor = None # 监视主线程是否在运行的线程
-
-def _main_monitor():
-    '''
-    #==============================================================
-    # 对主线程进行监视的函数
-    # 一旦主线程执行完毕就会向所有线程池函数队列尾注入停止标记
-    # 使所有的线程在执行完任务后都停止下来
-    # 对于命令行使用的 python 脚本尤为重要
-    # 因为如果所有线程不停止的话，控制权就不会交还给命令窗口
-    #==============================================================
-    '''
-    global _monitor
-    def _func():
-        while True:
-            import time
-            time.sleep(.1)
-            if not main_thread().isAlive():
-                pool_close_all()
-                break
-    if not _monitor:
-        _monitor = Thread(target=_func,name="MainMonitor")
-        _monitor.start()
 
 class thread:
     '''
@@ -130,6 +104,7 @@ class thread:
         #==============================================================
         '''
         orig_func[func.__name__] = func
+        @functools.wraps(func)
         def _run_threads(*args,**kw):
             p = []
             for _ in range(self.num):
@@ -149,10 +124,6 @@ class thread:
 
 import queue
 
-# 默认0号作为全局函数队列
-_pool_queue = {}
-_pool_func_num = {}
-
 class KillThreadParams(Exception):
     '''一个用来杀死进程的函数参数'''
     pass
@@ -168,14 +139,15 @@ class pool:
     # >>> import time
     # >>>
     # >>> # 只需要加下面这一行就可以将普通迭代执行函数变成线程池多线程执行
-    # >>> @vthread.pool(5) # 对于 foolfunc 开启5个线程池（pool_num）
+    # >>> @vthread.pool(5) # 对于 foolfunc 开启5个线程池
     # >>> def foolfunc(num):
     # ...     time.sleep(1)
     # ...     print(f"foolstring, foolnumb:{num}")
     # >>>
     # >>> # 默认参数:pool_num=None,join=False,log=True,gqueue=0
-    # >>> # pool_num不选时就自动选 cpu 核心数，目前join参数无效
+    # >>> # pool_num不选时就自动选 cpu 核心数
     # >>> # 就是说，装饰方法还可以更简化为 @vthread.pool()
+    # >>> # join参数不建议在主线程内打开。
     # >>>
     # >>> for i in range(10):
     # ...     foolfunc(i)
@@ -232,8 +204,18 @@ class pool:
     # >>>
     #==============================================================
     '''
+
+    _monitor = None # 监视主线程是否在运行的线程
+
+    _pool = None
+    
+    # 默认0号作为全局函数队列
+    _pool_queue = {}
+    _pool_func_num = {}
     join = False
-    def __init__(self,pool_num=None,gqueue=0,join=False,log=True):
+
+    @classmethod
+    def __init__(self,pool_num=None,gqueue=0,join=False,log=True,monitor=True):
         '''
         #==============================================================
         # **kw
@@ -243,17 +225,16 @@ class pool:
         #     :log       print函数的输出时是否加入线程名作前缀
         #==============================================================
         '''
-        pool.join = join
+        self.join = join
 
-        global _pool_queue,_pool_func_num
-        # 让配置在 toggle 执行变成只能手动配置 log_flag
+        # 让配置在 toggle 函数执行后的装饰行为都变成只能手动配置 log_flag
         if log_flag._decorator_toggle:
             log_flag._vlog = log
 
         # 默认用的是全局队列
-        if gqueue not in _pool_queue:
-            _pool_queue[gqueue] = queue.Queue()
-        self._pool = _pool_queue[gqueue]
+        if gqueue not in self._pool_queue:
+            self._pool_queue[gqueue] = queue.Queue()
+        self._pool = self._pool_queue[gqueue]
         
         # 默认将 print 函数进行monkey patch
         patch_print()
@@ -262,21 +243,25 @@ class pool:
         # 因为该线程池的原理就是让主线程变成派发函数的进程，执行到尾部自然就代表
         # 分配的任务已经分配完了，这时就可以注入停止标记让线程执行完就赶紧结束掉
         # 防止在命令行下控制权不交还的情况。
-        _main_monitor()
+        if monitor and not self._monitor:
+            self.main_monitor()
+        else:
+            self._monitor = "close"
 
         # 智能选择线程数量
-        num = pool._auto_pool_num(pool_num)
+        num = self._auto_pool_num(pool_num)
 
-        # 这里考虑的是控制伺服线程数量，相同的gqueue以最后一个出现的线程池数为基准
-        if gqueue not in _pool_func_num:
-            _pool_func_num[gqueue] = num
-            pool.run(num,gqueue)
+        # 这里考虑的是控制伺服线程数量，相同的gqueue以最后一个人为定义的线程池数为基准
+        if gqueue not in self._pool_func_num:
+            self._pool_func_num[gqueue] = num
+            self.run(num,gqueue)
         else:
             # 是以最后一个主动设置的线程池数为基准
             # 所以要排除不设置的情况
             if pool_num is not None:
-                pool.change_thread_num(num,gqueue)
+                self.change_thread_num(num,gqueue)
 
+    @classmethod
     def __call__(self,func):
         '''
         #==============================================================
@@ -284,50 +269,49 @@ class pool:
         #==============================================================
         '''
         orig_func[func.__name__] = func
+        @functools.wraps(func)
         def _run_threads(*args,**kw):
             # 将函数以及参数包装进 queue
             self._pool.put((func,args,kw))
         return _run_threads
 
 
-    @staticmethod
-    def change_thread_num(num,gqueue=0):
+    @classmethod
+    def change_thread_num(self,num,gqueue=0):
         '''
         #==============================================================
         # 通过组名字，用来修改线程数量的函数，默认修改gqueue=0的组
-        # 是静态函数，你可以直接用 vthread.pool.change_thread_num(3,1)修改
+        # 是静态函数，你可以直接用 vthread.self.change_thread_num(3)修改
         # 就是简单的多退少补，用来动态修改伺服线程数量的。
         #
-        # 因为原理是向线程队列注入停止标记，所以不要考虑及时性
+        # 因为原理是向线程队列注入停止标记，线程执行和线程接收停止信号是互斥安全的
         # 也是在设计初对任务执行完整性的一种考虑
         #==============================================================
         '''
-        global _pool_queue,_pool_func_num
-        if gqueue in _pool_func_num:
-            x = _pool_func_num[gqueue] - num
+        if gqueue in self._pool_func_num:
+            x = self._pool_func_num[gqueue] - num
             # 当前线程数少于最后一次定义的数量时候会增加伺服线程
             # 多了则会杀掉多余线程
             if x < 0:
-                pool.run(abs(x),gqueue)
+                self.run(abs(x),gqueue)
             if x > 0:
                 for _ in range(abs(x)):
-                    _pool_queue[gqueue].put(KillThreadParams)
-                _pool_func_num[gqueue] = num
+                    self._pool_queue[gqueue].put(KillThreadParams)
+                self._pool_func_num[gqueue] = num
 
-    @staticmethod
-    def run(num,gqueue):
+    @classmethod
+    def run(self,num,gqueue):
         '''
         #==============================================================
         # 运行伺服线程，不指定数量则默认以 cpu 核心数作为伺服线程数量
         # 每个线程都等待任意函数放进队列，然后被线程抓出然后执行
         #==============================================================
         '''
-        global _pool_queue
-        # 拖池函数
+        # 伺服函数
         def _pools_pull():
             while True:
                 try:
-                    v = _pool_queue[gqueue].get()
+                    v = self._pool_queue[gqueue].get()
                     if v == KillThreadParams:
                         return
                     func,args,kw = v
@@ -341,8 +325,33 @@ class pool:
         for _ in range(num):
             v.append(Thread(target=_pools_pull))
         for i in v: i.start()
-        if pool.join:
+        if self.join:
             for i in v: i.join()
+
+    @classmethod
+    def main_monitor(self):
+        '''
+        #==============================================================
+        # 对主线程进行监视的函数
+        # 一旦主线程执行完毕就会向所有线程池函数队列尾注入停止标记
+        # 使所有的线程在执行完任务后都停止下来
+        # 对于命令行使用的 python 脚本尤为重要
+        # 因为如果所有线程不停止的话，控制权就不会交还给命令窗口
+        #
+        # 在任意被含有该函数的装饰类装饰的情况下，这个是默认被打开的
+        # 可以在装饰时通过设置 monitor 参数是否打开，默认以第一个装饰器设置为准
+        #==============================================================
+        '''
+        def _func():
+            while True:
+                import time
+                time.sleep(.1)
+                if not main_thread().isAlive():
+                    self.close_all()
+                    break
+        if not self._monitor:
+            self._monitor = Thread(target=_func,name="MainMonitor")
+            self._monitor.start()
 
     @staticmethod
     def _auto_pool_num(num):
@@ -356,45 +365,47 @@ class pool:
                 num = 4
         return num
 
+    @classmethod
+    def close_by_gqueue(self,gqueue=0):
+        '''
+        #==============================================================
+        # 通过组名关闭该组所有的伺服线程
+        # 默认关闭gqueue=0组的所有伺服线程
+        #==============================================================
+        '''
+        self.change_thread_num(0,gqueue)
 
-def pool_close_by_gqueue(gqueue=0):
-    '''
-    #==============================================================
-    # 通过组名关闭该组所有的伺服线程
-    # 默认关闭gqueue=0组的所有伺服线程
-    #==============================================================
-    '''
-    pool.change_thread_num(0,gqueue)
+    @classmethod
+    def close_all(self):
+        '''
+        #==============================================================
+        # 关闭所有伺服线程
+        #==============================================================
+        '''
+        for i in self._pool_func_num:
+            self.change_thread_num(0,i)
 
-def pool_close_all():
-    '''
-    #==============================================================
-    # 关闭所有伺服线程
-    #==============================================================
-    '''
-    global _pool_func_num
-    for i in _pool_func_num:
-        pool.change_thread_num(0,i)
+    @classmethod
+    def show(self):
+        '''
+        #==============================================================
+        # 简单的打印一下当前的线程池的组数
+        # 以及打印每一组线程池的线程数量
+        #
+        # >>> vthread.show()
+        # [ MainThread ] threads group number: 3
+        # [ MainThread ] gqueue:0, alive threads number:6
+        # [ MainThread ] gqueue:1, alive threads number:5
+        # [ MainThread ] gqueue:2, alive threads number:2
+        # >>>
+        #==============================================================
+        '''
+        l = len(self._pool_func_num)
+        print(f"threads group number: {l}")
+        for i,j in self._pool_func_num.items():
+            print(f"gqueue:{i}, alive threads number:{j}")
 
-def pool_show():
-    '''
-    #==============================================================
-    # 简单的打印一下当前的线程池的组数
-    # 以及打印每一组线程池的线程数量
-    #
-    # >>> vthread.pool_show()
-    # [ MainThread ] threads group number: 3
-    # [ MainThread ] gqueue:0, alive threads number:6
-    # [ MainThread ] gqueue:1, alive threads number:5
-    # [ MainThread ] gqueue:2, alive threads number:2
-    # >>>
-    #==============================================================
-    '''
-    global _pool_func_num
-    l = len(_pool_func_num)
-    print(f"threads group number: {l}")
-    for i,j in _pool_func_num.items():
-        print(f"gqueue:{i}, alive threads number:{j}")
+
 
 
 def atom(func):
@@ -443,14 +454,10 @@ funcs = ["thread",
          "atom",
          "patch_print",
          "toggle",
-         "unpatch_all",
-         "pool_close_by_gqueue",
-         "pool_close_all",
-         "pool_show"]
+         "unpatch_all"]
 
 # 全局参
-values = ["log_flag",
-          "orig_func",
+values = ["orig_func",
           "lock"]
 
 
