@@ -32,7 +32,7 @@ def _new_print(*arg,**kw):
     lock.acquire()
     if log_flag._vlog:
         name = current_thread().getName()
-        name = f"[{name.center(12)}]"
+        name = f"[{name.center(13)}]"
         _org_print(name,*arg,**kw)
     else:
         _org_print(*arg,**kw)
@@ -304,6 +304,9 @@ class pool:
         '''
         # 伺服函数
         def _pools_pull():
+            ct = current_thread()
+            name = ct.getName()
+            ct.setName(name+"_%d"%gqueue)
             while True:
                 try:
                     v = self._pool_queue[gqueue].get()
