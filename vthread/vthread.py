@@ -45,8 +45,7 @@ def toggle(toggle=False,name="thread"):
     # 开关显示方式
     # 目前提供修改的参数有三个：
     # 1. "thread"  # 是否在print时在最左显示线程名字
-    # 2. "error"   # 是否显示error
-    # 3. "monitor" # 0.0.9 之后取消了这个参数，直接内置在初始化的默认选择里面
+    # 2. "error"   # 是否显示error信息
     #==============================================================
     '''
     # 因为装饰器是每次装饰都会默认打开 _vlog 一次，所以添加这个参数放置
@@ -206,15 +205,12 @@ class pool:
     '''
 
     _monitor = None # 监视主线程是否在运行的线程
-
-    _pool = None
     
     # 默认0号作为全局函数队列
     _pool_queue = {}
     _pool_func_num = {}
     join = False
 
-    @classmethod
     def __init__(self,pool_num=None,gqueue=0,join=False,log=True,monitor=True):
         '''
         #==============================================================
@@ -261,7 +257,6 @@ class pool:
             if pool_num is not None:
                 self.change_thread_num(num,gqueue)
 
-    @classmethod
     def __call__(self,func):
         '''
         #==============================================================
