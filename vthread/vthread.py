@@ -250,7 +250,7 @@ class pool:
         # 这里考虑的是控制伺服线程数量，相同的gqueue以最后一个人为定义的线程池数为基准
         if gqueue not in self._pool_func_num:
             self._pool_func_num[gqueue] = num
-            self.run(num,gqueue)
+            self._run(num,gqueue)
         else:
             # 是以最后一个主动设置的线程池数为基准
             # 所以要排除不设置的情况
@@ -288,14 +288,14 @@ class pool:
             # 当前线程数少于最后一次定义的数量时候会增加伺服线程
             # 多了则会杀掉多余线程
             if x < 0:
-                self.run(abs(x),gqueue)
+                self._run(abs(x),gqueue)
             if x > 0:
                 for _ in range(abs(x)):
                     self._pool_queue[gqueue].put(KillThreadParams)
-                self._pool_func_num[gqueue] = num
+            self._pool_func_num[gqueue] = num
 
     @classmethod
-    def run(self,num,gqueue):
+    def _run(self,num,gqueue):
         '''
         #==============================================================
         # 运行伺服线程，不指定数量则默认以 cpu 核心数作为伺服线程数量
