@@ -65,7 +65,7 @@ class thread:
     # >>> import vthread
     # >>>
     # >>> # 将 foolfunc 变成动态开启3个线程执行的函数
-    # >>> @vthread.vthread(3) # 默认参数:join=False,log=True
+    # >>> @vthread.thread(3) # 默认参数:join=False,log=True
     # ... def foolfunc():
     # ...     print("foolstring")
     # >>> 
@@ -75,8 +75,29 @@ class thread:
     # [  Thread-3  ]: foolstring
     # >>>
     #==============================================================
+    # 为了和pool的使用方法共通（一次函数执行只是一次函数单独执行的效果）
+    # 这里添加了一种更为简便的装饰手段
+    #
+    # >>> import vthread
+    # >>>
+    # >>> # 将 foolfunc 变成开启新线程执行的函数
+    # >>> @vthread.vthread # 这时的 vthread.thread 等同于 vthread.thread(1)
+    # ... def foolfunc():
+    # ...     print("foolstring")
+    # >>>
+    # >>> for i in range(4):
+    # ...     foolfunc() # 每次执行都会开启新线程，默认不join。
+    # [  Thread-1  ]: foolstring
+    # [  Thread-2  ]: foolstring
+    # [  Thread-3  ]: foolstring
+    # [  Thread-4  ]: foolstring
+    # >>>
+    #
+    # 不过需要注意的是，不要将 vthread.thread 带参数和不带参数的装饰器混用
+    # 可能会导致一些不可预知的异常。
+    #==============================================================
     '''
-    def __init__(self,num,join=False,log=True):
+    def __init__(self,num=1,join=False,log=True):
         '''
         #==============================================================
         # *args
@@ -86,15 +107,22 @@ class thread:
         #     :log   print函数的输出时是否加入线程名作前缀
         #==============================================================
         '''
-        self.num  = num
-        self.join = join
+        # 为了兼容不带参数的装饰方式，这里做了如下修改。
+        if type(num)==type(lambda:None): 
+            def _no_params_func(self,*args,**kw):
+                v = Thread(target=num,args=args,kwargs=kw)
+                v.start()
+            thread.__call__ = _no_params_func
+        else:
+            self.num  = num
+            self.join = join
 
         # 让配置在 toggle 执行变成只能手动配置 log_flag
         if log_flag._decorator_toggle:
             log_flag._vlog = log
         
         # 默认将 print 函数进行monkey patch
-        patch_print()
+        patch_print()        
 
     def __call__(self,func):
         '''

@@ -26,6 +26,22 @@ foolfunc(123) # 加入装饰器后，这个函数就变成了开5个线程执行
 [  Thread-3  ] foolstring, test1 foolnumb: 123
 [  Thread-4  ] foolstring, test1 foolnumb: 123
 [  Thread-5  ] foolstring, test1 foolnumb: 123
+
+# 为了使函数执行更独立（方便参数传递）可以用 vthread.thread(1) 来装饰
+# 但是为了使用更为简便 这里的 vthread.thread 等同于 vthread.thread(1)
+@vthread.thread 
+def foolfunc(num):
+    time.sleep(1)
+    print(f"foolstring, test1 foolnumb: {num}")
+
+for i in range(5):
+    foolfunc(123) # 执行与数量分离，可以使得参数传递更为动态
+
+执行效果同上
+
+# 注意：
+# 这种本身就用于简单测试的方法不要将带参数和不带参数的thread装饰器混用！
+# 可能会造成装饰出现问题。
 ```
 - ##### 线程池（核心功能）
 不加装饰器就是普通的单线程，只用加一行就能在不破坏原来的结构直接实现线程池操作，能进行参数传递，支持分组，这已经到了不破坏代码的极限了。

@@ -4,7 +4,7 @@ import sys
   
 setup(  
     name="vthread",
-    version="0.0.13",
+    version="0.1.0",
     author="vilame",
     author_email="opaquism@hotmail.com",
     description="the best threadpool pack.",

@@ -9,12 +9,28 @@ import vthread
 #========#
 # 多线程 #
 #========#
+# eg.1
 @vthread.thread(5) # 只要这一行就能让函数变成开5个线程执行同个函数
 def foolfunc(num):
     time.sleep(1)
     print(f"foolstring, test1 foolnumb: {num}")
 
 foolfunc(123) # 加入装饰器后，这个函数就变成了开5个线程执行的函数了
+
+# eg.2
+# 为了使函数执行更独立可以用 vthread.thread(1) 来装饰
+# 但是为了使用更为简便 这里的 vthread.thread 等同于 vthread.thread(1)
+@vthread.thread 
+def foolfunc(num):
+    time.sleep(1)
+    print(f"foolstring, test1 foolnumb: {num}")
+
+for i in range(5):
+    foolfunc(123) # 执行与数量分离，可以使得参数传递更为动态
+
+# 注意：
+# 这种本身就用于简单测试的方法不要将带参数和不带参数的thread装饰器混用！
+# 可能会造成装饰出现问题。
 
 
 
