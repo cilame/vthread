@@ -204,7 +204,8 @@ class pool:
     #==============================================================
     '''
 
-    _monitor = None # 监视主线程是否在运行的线程
+    _monitor = None       # 监视主线程是否在运行的线程
+    _monitor_run_num = {} # 用判断队列是否为空监视线程是否执行完毕
     
     # 默认0号作为全局函数队列
     _pool_queue = {}
@@ -243,6 +244,11 @@ class pool:
             self.main_monitor()
         else:
             self._monitor = "close"
+
+        # 在函数执行前put进该组队列，在函数执行完毕后get该组队列
+        # 对每组函数分配进行管理，实现函数执行完毕的挂钩
+        if gqueue not in self._monitor_run_num:
+            self._monitor_run_num[gqueue] = queue.Queue()
 
         # 智能选择线程数量
         num = self._auto_pool_num(pool_num)
@@ -308,16 +314,18 @@ class pool:
             name = ct.getName()
             ct.setName(name+"_%d"%gqueue)
             while True:
+                v = self._pool_queue[gqueue].get()
+                if v == KillThreadParams: return
                 try:
-                    v = self._pool_queue[gqueue].get()
-                    if v == KillThreadParams:
-                        return
                     func,args,kw = v
+                    self._monitor_run_num[gqueue].put('V') # 标记线程是否执行完毕
                     func(*args,**kw)
                 except BaseException as e:
                     if log_flag._elog:
                         print(" - thread stop_by_error - ",e)
                     break
+                finally:
+                    self._monitor_run_num[gqueue].get('V') # 标记线程是否执行完毕
         # 线程的开启
         v = []
         for _ in range(num):
@@ -343,8 +351,8 @@ class pool:
         def _func():
             while True:
                 import time
-                time.sleep(.1)
-                if not main_thread().isAlive():
+                time.sleep(.25)
+                if not main_thread().isAlive() and all(map(lambda i:i.empty(),self._monitor_run_num.values())):
                     self.close_all()
                     break
         if not self._monitor:
