@@ -450,8 +450,9 @@ def atom(func):
     '''
     def _atom(*arg,**kw):
         lock.acquire()
-        func(*arg,**kw)
+        v = func(*arg,**kw)
         lock.release()
+        return v
     return _atom
 
 def patch_print():
