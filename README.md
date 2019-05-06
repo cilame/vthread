@@ -4,45 +4,6 @@
 ```
 C:\Users\Administrator> pip3 install vthread
 ```
-- ##### 普通的多线程
-考虑到函数库的多用性，可能是觉得这种直接粗暴的开启多线程函数的测试需求比较常见，所以会保留有这样的一个功能。
-```python
-import time
-import vthread
-
-@vthread.thread(5) # 只要这一行就能让函数变成开5个线程执行同个函数
-def foolfunc(num):
-    time.sleep(1)
-    print(f"foolstring, test1 foolnumb: {num}")
-
-foolfunc(123) # 加入装饰器后，这个函数就变成了开5个线程执行的函数了
-
-# 考虑到函数库的易用性，个人觉得这种直接粗暴的开启多线程函数的测试需求比较常见
-# 所以才保留了这样的一个功能。
-
-执行效果如下：
-[  Thread-1  ] foolstring, test1 foolnumb: 123
-[  Thread-2  ] foolstring, test1 foolnumb: 123
-[  Thread-3  ] foolstring, test1 foolnumb: 123
-[  Thread-4  ] foolstring, test1 foolnumb: 123
-[  Thread-5  ] foolstring, test1 foolnumb: 123
-
-# 为了使函数执行更独立（方便参数传递）可以用 vthread.thread(1) 来装饰
-# 但是为了使用更为简便 这里的 vthread.thread 等同于 vthread.thread(1)
-@vthread.thread 
-def foolfunc(num):
-    time.sleep(1)
-    print(f"foolstring, test1 foolnumb: {num}")
-
-for i in range(5):
-    foolfunc(123) # 执行与数量分离，可以使得参数传递更为动态
-
-执行效果同上
-
-# 注意：
-# 这种本身就用于简单测试的方法不要将带参数和不带参数的thread装饰器混用！
-# 可能会造成装饰出现问题。
-```
 - ##### 线程池（核心功能）
 不加装饰器就是普通的单线程，只用加一行就能在不破坏原来的结构直接实现线程池操作，能进行参数传递，支持分组，这已经到了不破坏代码的极限了。
 ```python
@@ -202,4 +163,44 @@ pool1 = vthread.pool(gqueue=1)
 pool2 = vthread.pool(6,gqueue=2)
 pool2 = vthread.pool(8,gqueue=2)
 # 这样就意味着gqueue=1的线程池数量为默认的cpu核心数，gqueue=2的线程池数量为8
+```
+
+- ##### 普通的多线程
+考虑到函数库的多用性，可能是觉得这种直接粗暴的开启多线程函数的测试需求比较常见，所以会保留有这样的一个功能。
+```python
+import time
+import vthread
+
+@vthread.thread(5) # 只要这一行就能让函数变成开5个线程执行同个函数
+def foolfunc(num):
+    time.sleep(1)
+    print(f"foolstring, test1 foolnumb: {num}")
+
+foolfunc(123) # 加入装饰器后，这个函数就变成了开5个线程执行的函数了
+
+# 考虑到函数库的易用性，个人觉得这种直接粗暴的开启多线程函数的测试需求比较常见
+# 所以才保留了这样的一个功能。
+
+执行效果如下：
+[  Thread-1  ] foolstring, test1 foolnumb: 123
+[  Thread-2  ] foolstring, test1 foolnumb: 123
+[  Thread-3  ] foolstring, test1 foolnumb: 123
+[  Thread-4  ] foolstring, test1 foolnumb: 123
+[  Thread-5  ] foolstring, test1 foolnumb: 123
+
+# 为了使函数执行更独立（方便参数传递）可以用 vthread.thread(1) 来装饰
+# 但是为了使用更为简便 这里的 vthread.thread 等同于 vthread.thread(1)
+@vthread.thread 
+def foolfunc(num):
+    time.sleep(1)
+    print(f"foolstring, test1 foolnumb: {num}")
+
+for i in range(5):
+    foolfunc(123) # 执行与数量分离，可以使得参数传递更为动态
+
+执行效果同上
+
+# 注意：
+# vthread.thread 不带参数的方式只能装饰一个函数，装饰多个函数会出现问题，仅用于测试单个函数。
+# vthread.thread(1) 带参数的可以装饰多个函数，但是已经有了分组线程池的强大功能，为什么还要这样浪费资源呢？
 ```
