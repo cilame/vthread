@@ -35,7 +35,7 @@ def _new_print(*arg,**kw):
     lock.acquire()
     if log_flag._vlog:
         name = current_thread().getName()
-        name = f"[{name.center(13)}]"
+        name = "[{}]".format(name.center(13))
         _org_print(name,*arg,**kw)
     else:
         _org_print(*arg,**kw)
@@ -431,9 +431,9 @@ class pool:
         #==============================================================
         '''
         l = len(self._pool_func_num)
-        print(f"threads group number: {l}")
+        print("threads group number: {}".format(l))
         for i,j in self._pool_func_num.items():
-            print(f"gqueue:{i}, alive threads number:{j}")
+            print("gqueue:{}, alive threads number:{}".format(i, j))
 
     @classmethod
     def wait(self, gqueue=0):
