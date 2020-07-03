@@ -4,7 +4,7 @@ pool_gets = vthread.pool(8,gqueue=1)# 线程池1 多线程请求任务
 pool_save = vthread.pool(1,gqueue=2)# 线程池2 数据写入文件，只开一个线程的性能足够处理写入任务
 
 
-import os, re, json, time, queue
+import os, re, json, time, queue, traceback
 import requests
 from lxml import etree
 datapipe = queue.Queue() # 不同线程之间用管道传递数据
@@ -29,7 +29,7 @@ def crawl(page):
 def save_jsonline():
     def check_stop():
         try:    ret = vthread.pool.check_stop(gqueue=1) # 检查1号线程池的任务是否全部请求结束
-        except: ret = False # 当你不用 vthread 时也能运行的保底处理
+        except: ret = False; print(traceback.format_exc()) # 当你不用 vthread 时也能运行的保底处理
         return ret
     timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime()) # 年月日_时分秒
     filename = 'v{}.json'.format(timestamp) # 输出文件名(这里使用jsonlines格式存储)
