@@ -10,6 +10,9 @@
 # 可以通过执行 vthread.unpatch_all() 解除这个补丁还原 print
 #==============================================================
 '''
+import time
+import queue
+import traceback
 from threading import Thread,Lock,RLock,\
                      current_thread,main_thread
 import builtins
@@ -54,7 +57,6 @@ def toggle(toggle=False,name="thread"):
     log_flag._decorator_toggle = False
     if name == "thread" : log_flag._vlog = toggle
     if name == "error"  : log_flag._elog = toggle
-
 
 
 class thread:
@@ -141,20 +143,16 @@ class thread:
                         func(*args,**kw)
                     except Exception as e:
                         if log_flag._elog:
-                            print(" - stop_by_error - ",e)
+                            print(traceback.format_exc())
                 p.append(Thread(target=_func))
             for i in p: i.start()
             if self.join:
                 for i in p: i.join()
         return _run_threads
 
-
-import queue
-
 class KillThreadParams(Exception):
     '''一个用来杀死进程的函数参数'''
     pass
-
 
 class pool:
     '''
@@ -304,7 +302,6 @@ class pool:
             self._pool.put((func,args,kw))
         return _run_threads
 
-
     @classmethod
     def change_thread_num(self,num,gqueue=0):
         '''
@@ -340,7 +337,7 @@ class pool:
         def _pools_pull():
             ct = current_thread()
             name = ct.getName()
-            ct.setName(name+"_%d"%gqueue)
+            ct.setName("{}_{}".format(name, gqueue))
             while True:
                 v = self._pool_queue[gqueue].get()
                 if v == KillThreadParams: return
@@ -350,7 +347,7 @@ class pool:
                     func(*args,**kw)
                 except BaseException as e:
                     if log_flag._elog:
-                        print(" - thread stop_by_error - ",e)
+                        print(traceback.format_exc())
                     break
                 finally:
                     self._monitor_run_num[gqueue].get('V') # 标记线程是否执行完毕
@@ -378,7 +375,6 @@ class pool:
         '''
         def _func():
             while True:
-                import time
                 time.sleep(.25)
                 if not main_thread().isAlive() and all(map(lambda i:i.empty(),self._monitor_run_num.values())):
                     self.close_all()
@@ -439,6 +435,14 @@ class pool:
         for i,j in self._pool_func_num.items():
             print(f"gqueue:{i}, alive threads number:{j}")
 
+    @classmethod
+    def wait(self, gqueue=0):
+        while self.check_stop(gqueue):
+            time.sleep(.25)
+
+    @classmethod
+    def check_stop(self, gqueue=0):
+        return self._monitor_run_num[gqueue].qsize() or self._pool_queue[gqueue].qsize()
 
 
 
@@ -497,15 +501,3 @@ values = ["orig_func",
 
 
 __all__ = funcs + values
-
-
-
-
-
-
-
-
-
-
-
-
