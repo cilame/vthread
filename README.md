@@ -91,6 +91,9 @@ def foolfunc_():
 ```
 # 可以使用 vthread.pool.wait 函数来等待某一组线程池执行完毕再继续后面的操作
 # 该函数仅有一个默认参数 gqueue=0，需要等待的分组。
+# 该函数的本质就是一个定时循环内部使用 vthread.pool.check_stop 函数不停检测某个任务组是否结束。
+# check_stop 函数返回结果为 0 则为线程池已执行结束。
+# 如果有比 wait 更丰富的处理请使用 check_stop 。
 import time
 import vthread
 
