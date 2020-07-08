@@ -348,7 +348,6 @@ class pool:
                 except BaseException as e:
                     if log_flag._elog:
                         print(traceback.format_exc())
-                    break
                 finally:
                     self._monitor_run_num[gqueue].get('V') # 标记线程是否执行完毕
         # 线程的开启
