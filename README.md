@@ -202,11 +202,26 @@ datapipe = queue.Queue() # 不同线程之间用管道传递数据
 def crawl(page):
     url = 'https://www.baidu.com/s?wd=123&pn={}'.format(page*10)
     headers = {
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.75 Safari/537.36"
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+        "Accept-Encoding": "gzip, deflate, ", # auto delete br encoding. cos requests and scrapy can not decode it.
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "Cookie": (
+            "BAIDUID=AEFC0BF73865D50E79A88E1D572BDFFC:FG=1; "
+        ),
+        "Host": "www.baidu.com",
+        "Pragma": "no-cache",
+        "Referer": "https://www.baidu.com/",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.79 Safari/537.36"
     }
     s = requests.get(url, headers=headers)
     if s.history and s.history[0].status_code == 302:
-        print('retrying {}.'.format(s.history[0].request.url))
+        print('retrying {}. curr statcode:{}'.format(s.history[0].request.url, s.status_code))
         crawl(page) # 百度现在有验证码问题，直接重新提交任务即可。
         return
     tree = etree.HTML(s.content.decode('utf-8'))
@@ -230,11 +245,11 @@ def save_jsonline():
                 print('write: {}'.format(data))
                 f.write(json.dumps(data, ensure_ascii=False)+"\n")
             time.sleep(.25)
-            if (not check_stop()) and (not datapipe.qsize()):
+            if check_stop() and datapipe.qsize() == 0:
                 break
 
 # 提交 n 个网页请求的任务，然后开启写入任务
-for page in range(20): crawl(page)
+for page in range(30): crawl(page)
 save_jsonline()
 # 虽然这里的处理按照该脚本代码的逻辑可以不必让 save_jsonline 变成线程执行，不过数据保存也写成线程池的好处就是
 # 如果存在多个不同的表格存储，你就可以按照类似的方式， 新加一个数据管道，新加一个保存函数进行多文件并行存储
