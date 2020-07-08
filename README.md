@@ -22,16 +22,16 @@ for i in range(10):
 # 只用加一行就能不破坏原来的代码结构直接实现线程池操作，能进行参数传递
 
 执行效果如下：
-[  Thread-1  ] foolstring, test2 foolnumb: 0
-[  Thread-5  ] foolstring, test2 foolnumb: 4
-[  Thread-2  ] foolstring, test2 foolnumb: 2
-[  Thread-6  ] foolstring, test2 foolnumb: 5
-[  Thread-4  ] foolstring, test2 foolnumb: 3
-[  Thread-3  ] foolstring, test2 foolnumb: 1
-[  Thread-1  ] foolstring, test2 foolnumb: 6
-[  Thread-5  ] foolstring, test2 foolnumb: 7
-[  Thread-2  ] foolstring, test2 foolnumb: 8
-[  Thread-6  ] foolstring, test2 foolnumb: 9
+[  Thread-1_0 ] foolstring, test2 foolnumb: 0
+[  Thread-3_0 ] foolstring, test2 foolnumb: 2
+[  Thread-6_0 ] foolstring, test2 foolnumb: 5
+[  Thread-2_0 ] foolstring, test2 foolnumb: 1
+[  Thread-5_0 ] foolstring, test2 foolnumb: 4
+[  Thread-4_0 ] foolstring, test2 foolnumb: 3
+[  Thread-2_0 ] foolstring, test2 foolnumb: 9
+[  Thread-3_0 ] foolstring, test2 foolnumb: 7
+[  Thread-6_0 ] foolstring, test2 foolnumb: 8
+[  Thread-1_0 ] foolstring, test2 foolnumb: 6
 ```
 - ##### 支持分组线程池
 如果你想要让你的某几个函数有M个线程执行，而另外几个函数要N个线程去执行。
@@ -60,8 +60,8 @@ def foolfunc3(num):
 for i in range(10): foolfunc1(i)
 for i in range(10): foolfunc2(i) 
 for i in range(10): foolfunc3(i)
-# 额外开启线程池组的话最好不要用gqueue=0
-# 因为gqueue=0就是默认参数
+# 额外开启线程池组的话最好不要用gqueue='v'
+# 因为gqueue='v'就是默认参数
 ```
 
 - ##### 原子封装
@@ -90,7 +90,7 @@ def foolfunc_():
 再某些情况下需要等待线程池任务完成之后再继续后面的操作，请看如下使用。
 ```
 # 可以使用 vthread.pool.wait 函数来等待某一组线程池执行完毕再继续后面的操作
-# 该函数仅有一个默认参数 gqueue=0，需要等待的分组。
+# 该函数仅有一个默认参数 gqueue='v'，需要等待的分组。
 # 该函数的本质就是一个定时循环内部使用 vthread.pool.check_stop 函数不停检测某个任务组是否结束。
 # check_stop 函数返回结果为 0 则为线程池已执行结束。
 # 如果有比 wait 更丰富的处理请使用 check_stop 。
@@ -103,9 +103,85 @@ def foolfunc_():
     print(123)
 for i in range(10): foolfunc_()
 
-vthread.pool.wait() # 等待gqueue=0分组线程执行完毕再继续后面的代码
+vthread.pool.wait() # 等待gqueue='v'分组线程执行完毕再继续后面的代码
 print('end.')
 ```
+- ##### 一个简单的一边生产一边消费的代码
+```
+import time, random, queue
+from vthread import pool, lock
+
+ls = queue.Queue()
+producer = 'pr'
+consumer = 'co'
+
+@pool(6, gqueue=producer)
+def creater(num):
+    time.sleep(random.random()) # 随机睡眠 0.0 ~ 1.0 秒
+    print("数据进入队列: {}".format(num))
+    ls.put(num)
+@pool(1, gqueue=consumer)
+def coster():
+    # 这里之所以使用 check_stop 是因为，这里需要边生产边消费
+    while not pool.check_stop(gqueue=producer):
+        time.sleep(random.random()) # 随机睡眠 0.0 ~ 1.0 秒
+        pp = [ls.get() for _ in range(ls.qsize())]
+        print('当前消费的列表 list: {}'.format(pp))
+
+for i in range(30): creater(i)
+coster() # 写作逻辑限制了这里的数量
+pool.wait(gqueue=producer) # 等待默认的 gqueue=producer 组线程池全部停止再执行后面内容
+pool.wait(gqueue=consumer) # 等待默认的 gqueue=consumer 组线程池全部停止再执行后面内容
+print('当生产和消费的任务池数据都结束后，这里才会打印')
+print('current queue size:{}'.format(ls.qsize()))
+print('end')
+```
+- ##### 多个消费者并行处理的代码会变得简单
+```
+import time, random, queue
+from vthread import pool, lock
+
+ls1 = queue.Queue()
+ls2 = queue.Queue()
+producer = 'pr'
+consumer1 = 'co1'
+consumer2 = 'co2'
+
+@pool(6, gqueue=producer)
+def creater(num):
+    time.sleep(random.random()) # 随机睡眠 0.0 ~ 1.0 秒
+    num1, num2 = num, num*num+1000
+    print("数据进入队列: num:{}".format(num))
+    ls1.put(num1)
+    ls2.put(num2)
+
+# 两个消费者
+@pool(1, gqueue=consumer1)
+def coster1():
+    while not pool.check_stop(gqueue=producer):
+        time.sleep(random.random()) # 随机睡眠 0.0 ~ 1.0 秒
+        pp = [ls1.get() for _ in range(ls1.qsize())]
+        print('当前消费的列表 list: {}'.format(pp))
+@pool(1, gqueue=consumer2)
+def coster2():
+    while not pool.check_stop(gqueue=producer):
+        time.sleep(random.random()) # 随机睡眠 0.0 ~ 1.0 秒
+        pp = [ls2.get() for _ in range(ls2.qsize())]
+        print('当前消费的列表 list: {}'.format(pp))
+for i in range(30): creater(i)
+coster1()
+coster2()
+
+pool.wait(gqueue=producer) # 等待默认的 gqueue=producer 组线程池全部停止再执行后面内容
+pool.wait(gqueue=consumer1) # 等待默认的 gqueue=consumer1 组线程池全部停止再执行后面内容
+pool.wait(gqueue=consumer2) # 等待默认的 gqueue=consumer2 组线程池全部停止再执行后面内容
+print('当生产和消费的任务池数据都结束后，这里才会打印')
+print('current queue 1 size:{}'.format(ls1.qsize()))
+print('current queue 2 size:{}'.format(ls2.qsize()))
+print('end')
+```
+
+
 
 - ## 百度爬虫，线程池示例脚本
 简单使用该库写一个简单的多线程 “请求”和 “写入文件”并行处理的百度爬虫作为使用范例。这里的代码仍然是注释装饰器则为正常单线程，添加装饰器则自动变成多线程池处理。
@@ -219,7 +295,7 @@ def foolfunc1():
 @vthread.pool(18)
 def foolfunc1():
     pass
-# 这样就意味着gqueue=0的线程池数量为18
+# 这样就意味着gqueue='v'的线程池数量为18
 # -------------------- eg.2 --------------------
 @vthread.pool(10)
 def foolfunc1():
@@ -227,7 +303,7 @@ def foolfunc1():
 @vthread.pool()
 def foolfunc1():
     pass
-# 这样就意味着gqueue=0的线程池数量为10
+# 这样就意味着gqueue='v'的线程池数量为10
 # -------------------- eg.3 --------------------
 @vthread.pool()
 def foolfunc1():
@@ -235,7 +311,7 @@ def foolfunc1():
 @vthread.pool()
 def foolfunc1():
     pass
-这样就意味着gqueue=0的线程池数量为默认的cpu核心数
+这样就意味着gqueue='v'的线程池数量为默认的cpu核心数
 # -------------------- eg.4 --------------------
 pool1 = vthread.pool(gqueue=1)
 pool2 = vthread.pool(6,gqueue=2)

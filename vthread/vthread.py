@@ -169,10 +169,9 @@ class pool:
     # ...     time.sleep(1)
     # ...     print(f"foolstring, foolnumb:{num}")
     # >>>
-    # >>> # 默认参数:pool_num=None,join=False,log=True,gqueue=0
+    # >>> # 默认参数:pool_num=None,log=True,gqueue='v'
     # >>> # pool_num不选时就自动选 cpu 核心数
     # >>> # 就是说，装饰方法还可以更简化为 @vthread.pool()
-    # >>> # join参数不建议在主线程内打开。
     # >>>
     # >>> for i in range(10):
     # ...     foolfunc(i)
@@ -236,19 +235,16 @@ class pool:
     # 默认0号作为全局函数队列
     _pool_queue = {}
     _pool_func_num = {}
-    join = False
 
-    def __init__(self,pool_num=None,gqueue=0,join=False,log=True,monitor=True):
+    def __init__(self,pool_num=None,gqueue='v',log=True,monitor=True):
         '''
         #==============================================================
         # **kw
         #     :pool_num  伺服线程数量
         #     :gqueue    全局队列表的index，默认0，建议用数字标识
-        #     :join      多线程是否join
         #     :log       print函数的输出时是否加入线程名作前缀
         #==============================================================
         '''
-        self.join = join
 
         # 让配置在 toggle 函数执行后的装饰行为都变成只能手动配置 log_flag
         if log_flag._decorator_toggle:
@@ -303,10 +299,10 @@ class pool:
         return _run_threads
 
     @classmethod
-    def change_thread_num(self,num,gqueue=0):
+    def change_thread_num(self,num,gqueue='v'):
         '''
         #==============================================================
-        # 通过组名字，用来修改线程数量的函数，默认修改gqueue=0的组
+        # 通过组名字，用来修改线程数量的函数，默认修改gqueue='v'的组
         # 是静态函数，你可以直接用 vthread.self.change_thread_num(3)修改
         # 就是简单的多退少补，用来动态修改伺服线程数量的。
         #
@@ -351,12 +347,7 @@ class pool:
                 finally:
                     self._monitor_run_num[gqueue].get('V') # 标记线程是否执行完毕
         # 线程的开启
-        v = []
-        for _ in range(num):
-            v.append(Thread(target=_pools_pull))
-        for i in v: i.start()
-        if self.join:
-            for i in v: i.join()
+        for _ in range(num): Thread(target=_pools_pull).start()
 
     @classmethod
     def main_monitor(self):
@@ -395,11 +386,11 @@ class pool:
         return num
 
     @classmethod
-    def close_by_gqueue(self,gqueue=0):
+    def close_by_gqueue(self,gqueue='v'):
         '''
         #==============================================================
         # 通过组名关闭该组所有的伺服线程
-        # 默认关闭gqueue=0组的所有伺服线程
+        # 默认关闭gqueue='v'组的所有伺服线程
         #==============================================================
         '''
         self.change_thread_num(0,gqueue)
@@ -435,13 +426,68 @@ class pool:
             print("gqueue:{}, alive threads number:{}".format(i, j))
 
     @classmethod
-    def wait(self, gqueue=0):
-        while self.check_stop(gqueue):
+    def wait(self, gqueue='v'):
+        '''
+        #==============================================================
+        # 等待任务结束，以下是实例代码
+        #
+        # import vthread, time
+        # @vthread.pool(6) # 生成默认的 gqueue='v' 组线程池，6个线程
+        # def foolfunc1(num):
+        #     time.sleep(1)
+        #     print("foolstring, test foolnumb {}".format(num))
+        # ls = []
+        # @vthread.pool(2, gqueue='h') # 生成 gqueue='h' 组线程池，2个线程
+        # def foolfunc2(num):
+        #     time.sleep(1)
+        #     print('123123')
+        #     ls.append(num*3/2)
+        # for i in range(30): foolfunc1(i)
+        # for i in range(30): foolfunc2(i)
+        # vthread.pool.wait() # 等待默认的 gqueue='v' 组线程池全部停止再执行后面内容
+        # vthread.pool.wait(gqueue='h') # 等待默认的 gqueue='v' 组线程池全部停止再执行后面内容
+        # print('ls:{}'.format(ls))
+        # print('end')
+        #==============================================================
+        '''
+        while not self.check_stop(gqueue):
             time.sleep(.25)
 
     @classmethod
-    def check_stop(self, gqueue=0):
-        return self._monitor_run_num[gqueue].qsize() or self._pool_queue[gqueue].qsize()
+    def check_stop(self, gqueue='v'):
+        '''
+        #==============================================================
+        # 该函数数用于一边生产一边消费的代码中会很方便，扩展成多消费者也很容易
+        # 下面是示例代码
+        #
+        # import time, random, queue
+        # from vthread import pool, lock
+        # ls = queue.Queue()
+        # producer = 'pr'
+        # consumer = 'co'
+        # @pool(6, gqueue=producer)
+        # def creater(num):
+        #     time.sleep(random.random()) # 随机睡眠 0.0 ~ 1.0 秒
+        #     with lock:
+        #         print("数据进入队列: {}".format(num))
+        #         ls.put(num)
+        # @pool(1, gqueue=consumer)
+        # def coster():
+        #     # 这里之所以使用 check_stop 是因为，这里需要边生产边消费
+        #     while not pool.check_stop(gqueue=producer):
+        #         time.sleep(random.random()) # 随机睡眠 2.0 ~ 3.0 秒
+        #         pp = [ls.get() for _ in range(ls.qsize())]
+        #         print('当前消费的列表 list: {}'.format(pp))
+        # for i in range(30): creater(i)
+        # coster()
+        # pool.wait(gqueue=producer) # 等待默认的 gqueue=producer 组线程池全部停止再执行后面内容
+        # pool.wait(gqueue=consumer) # 等待默认的 gqueue=consumer 组线程池全部停止再执行后面内容
+        # print('当生产和消费的任务池数据都结束后，这里才会打印')
+        # print('ls:{}'.format(ls.qsize()))
+        # print('end')
+        #==============================================================
+        '''
+        return not (self._monitor_run_num[gqueue].qsize() or self._pool_queue[gqueue].qsize())
 
 
 
