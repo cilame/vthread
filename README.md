@@ -104,6 +104,7 @@ def foolfunc_():
 for i in range(10): foolfunc_()
 
 vthread.pool.wait() # 等待gqueue='v'分组线程执行完毕再继续后面的代码
+# vthread.pool.waitall() # 当你的程序执行过程比较单调时，可以考虑等待全部线程池都执行完再往后继续。
 print('end.')
 ```
 - ##### 一个简单的一边生产一边消费的代码
@@ -172,9 +173,10 @@ for i in range(30): creater(i)
 coster1()
 coster2()
 
-pool.wait(gqueue=producer) # 等待默认的 gqueue=producer 组线程池全部停止再执行后面内容
-pool.wait(gqueue=consumer1) # 等待默认的 gqueue=consumer1 组线程池全部停止再执行后面内容
-pool.wait(gqueue=consumer2) # 等待默认的 gqueue=consumer2 组线程池全部停止再执行后面内容
+pool.waitall() # 当需要简单等待全部任务结束再执行某些任务时，这样处理即可，这个等于下面注释中的内容。
+# pool.wait(gqueue=producer)
+# pool.wait(gqueue=consumer1)
+# pool.wait(gqueue=consumer2)
 print('当生产和消费的任务池数据都结束后，这里才会打印')
 print('current queue 1 size:{}'.format(ls1.qsize()))
 print('current queue 2 size:{}'.format(ls2.qsize()))

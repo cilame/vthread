@@ -426,6 +426,11 @@ class pool:
             print("gqueue:{}, alive threads number:{}".format(i, j))
 
     @classmethod
+    def waitall(self):
+        while any([not self.check_stop(gqueue) for gqueue in self._monitor_run_num]):
+            time.sleep(.25)
+
+    @classmethod
     def wait(self, gqueue='v'):
         '''
         #==============================================================

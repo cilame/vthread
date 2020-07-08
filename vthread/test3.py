@@ -32,9 +32,7 @@ for i in range(30): creater(i)
 coster1()
 coster2()
 
-pool.wait(gqueue=producer) # 等待默认的 gqueue=producer 组线程池全部停止再执行后面内容
-pool.wait(gqueue=consumer1) # 等待默认的 gqueue=consumer1 组线程池全部停止再执行后面内容
-pool.wait(gqueue=consumer2) # 等待默认的 gqueue=consumer2 组线程池全部停止再执行后面内容
+pool.waitall()
 print('当生产和消费的任务池数据都结束后，这里才会打印')
 print('current queue 1 size:{}'.format(ls1.qsize()))
 print('current queue 2 size:{}'.format(ls2.qsize()))
