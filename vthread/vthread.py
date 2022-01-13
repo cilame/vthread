@@ -18,6 +18,8 @@ from threading import Thread,Lock,RLock,\
 import builtins
 import functools
 
+# 兼容 isAlive 函数被完全遗弃的新版
+Thread.isAlive = Thread.is_alive
 
 lock = RLock()
 
